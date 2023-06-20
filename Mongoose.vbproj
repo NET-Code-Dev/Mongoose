@@ -6,7 +6,12 @@
     <StartupObject>Mongoose.Form1</StartupObject>
     <UseWindowsForms>true</UseWindowsForms>
     <MyType>WindowsForms</MyType>
+    <ApplicationIcon>Mongoose.ico</ApplicationIcon>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="Mongoose.ico" />
+  </ItemGroup>
 
   <ItemGroup>
     <Import Include="System.Data" />

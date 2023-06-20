@@ -5,7 +5,7 @@ VisualStudioVersion = 17.6.33801.468
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{778DAE3C-4631-46EA-AA77-85C1314464D9}") = "Mongoose", "Mongoose.vbproj", "{4F8F8BBB-3A48-490C-B268-3F12152C5DA8}"
 EndProject
-Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "Mongoose_Setup", "..\Mongoose_Setup\Mongoose_Setup.vdproj", "{7090368D-9622-4079-8F49-3CC916FAF99A}"
+Project("{54435603-DBB4-11D2-8724-00A0C9A8B90C}") = "Mongoose_Setup", "..\Mongoose_Setup\Mongoose_Setup.vdproj", "{E2CF269A-15CC-41DC-82A4-15F69DEABD46}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -17,8 +17,8 @@ Global
 		{4F8F8BBB-3A48-490C-B268-3F12152C5DA8}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4F8F8BBB-3A48-490C-B268-3F12152C5DA8}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4F8F8BBB-3A48-490C-B268-3F12152C5DA8}.Release|Any CPU.Build.0 = Release|Any CPU
-		{7090368D-9622-4079-8F49-3CC916FAF99A}.Debug|Any CPU.ActiveCfg = Debug
-		{7090368D-9622-4079-8F49-3CC916FAF99A}.Release|Any CPU.ActiveCfg = Release
+		{E2CF269A-15CC-41DC-82A4-15F69DEABD46}.Debug|Any CPU.ActiveCfg = Debug
+		{E2CF269A-15CC-41DC-82A4-15F69DEABD46}.Release|Any CPU.ActiveCfg = Release
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

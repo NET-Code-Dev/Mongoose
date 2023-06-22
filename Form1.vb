@@ -5,6 +5,7 @@ Imports System.Text
 Imports System.Text.RegularExpressions
 Imports System.Xml
 Imports OfficeOpenXml
+Imports System.Windows.Forms
 
 Public Class Form1
     Private Sub Form1_Load(sender As Object, e As EventArgs) Handles MyBase.Load
@@ -20,350 +21,396 @@ Public Class Form1
 
     End Sub
 
-    Private Sub ButtonExcelToKML_Click(sender As Object, e As EventArgs) Handles ButtonExcelToKML.Click
+    Private Const FolderConfigFileName As String = "folderConfig.txt"
+    Private Const ExcelConfigFileName As String = "excelFileConfig.txt"
 
-        '/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        '/////////////////////////////////////////////////////////////////THIS CODE WILL REPLACE THE OPEN FILE DIALOG BOX WITH A CODE THAT WILL AUTOMATICALLY OPEN THE MOST RECENT FILE IN THE FOLDER<<<<<<<<<<
+    Private Function GetSavedPath(configFileName As String) As String
+        Dim savedPath As String = String.Empty
 
-        ' Get the user's directory path
-        Dim userProfilePath As String = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
-
-        ' Add additional directory structure
-        Dim kmlDirectoryPath As String = Path.Combine(userProfilePath, "Acuren Inspection, Inc", "523 CP - General", "Management", "Project Management", "Mongoose")
-
-        ' Get the DirectoryInfo for the selected folder
-        Dim directoryInfo As New DirectoryInfo(kmlDirectoryPath)
-
-        ' Get all files matching the pattern "Mongoose_Project_Tracker_????.-??.-??*.xlsm"
-        Dim allFiles As FileInfo() = directoryInfo.GetFiles("Mongoose_Project_Tracker_????-??-??*.xlsm")
-
-        ' Order by creation time descending
-        Dim orderedFiles = allFiles.OrderByDescending(Function(file) file.CreationTime).ToList()
-
-        ' Select the most recent file
-        Dim mostRecentFile As FileInfo = orderedFiles.FirstOrDefault()
-
-        ' Check if file exists
-        If mostRecentFile Is Nothing Then
-            MessageBox.Show("No Excel file found.")
-            Return
+        If File.Exists(configFileName) Then
+            Try
+                savedPath = File.ReadAllText(configFileName)
+            Catch ex As Exception
+                MessageBox.Show($"Could not read the config file: {ex.Message}")
+            End Try
+        Else
+            MessageBox.Show($"The saved file {configFileName} does not exist.")
         End If
 
-        Dim excelFilePath As String = mostRecentFile.FullName
+        Return savedPath
+    End Function
+
+    Private Sub SavePath(savedPath As String, configFileName As String)
+        Dim desktopPath As String = Environment.GetFolderPath(Environment.SpecialFolder.Desktop)
+        Dim fullPath As String = Path.Combine(desktopPath, configFileName)
+
+        Try
+            File.WriteAllText(fullPath, savedPath)
+        Catch ex As Exception
+            MessageBox.Show($"Could not save the directory path to the config file: {ex.Message}")
+        End Try
+    End Sub
+
+    Private Function GetSavedFolderPath() As String
+        Dim desktopPath As String = Environment.GetFolderPath(Environment.SpecialFolder.Desktop)
+        Dim configFilePath As String = Path.Combine(desktopPath, FolderConfigFileName)
+        Dim savedPath As String = String.Empty
+
+        If File.Exists(configFilePath) Then
+            Try
+                savedPath = File.ReadAllText(configFilePath)
+            Catch ex As Exception
+                MessageBox.Show($"Could not read the config file: {ex.Message}")
+            End Try
+        Else
+            MessageBox.Show($"The saved file {FolderConfigFileName} does not exist.")
+        End If
+
+        Return savedPath
+    End Function
+
+    Private Sub SaveFolderPath(savedPath As String)
+        Dim desktopPath As String = Environment.GetFolderPath(Environment.SpecialFolder.Desktop)
+        Dim configFilePath As String = Path.Combine(desktopPath, FolderConfigFileName)
+
+        Try
+            File.WriteAllText(configFilePath, savedPath)
+        Catch ex As Exception
+            MessageBox.Show($"Could not save the folder path to the config file: {ex.Message}")
+        End Try
+    End Sub
+
+    Private Function ShowFolderBrowserDialog(Optional defaultPath As String = "") As String
+        Dim folderBrowserDialog As New FolderBrowserDialog()
+
+        If Not String.IsNullOrEmpty(defaultPath) Then
+            folderBrowserDialog.SelectedPath = defaultPath
+        End If
+
+        If folderBrowserDialog.ShowDialog() = DialogResult.OK Then
+            Return folderBrowserDialog.SelectedPath
+        Else
+            Return String.Empty
+        End If
+    End Function
+
+    Private Function IsExcelFile(filePath As String) As Boolean
+        Dim validExtensions As String() = {".xls", ".xlsx", ".xlsm"}
+        Dim extension As String = Path.GetExtension(filePath)
+        Return validExtensions.Contains(extension)
+    End Function
+
+    Private Function FileExistsWithWildcard(filePath As String) As Boolean
+        Dim directoryPath As String = Path.GetDirectoryName(filePath)
+        Dim fileName As String = Path.GetFileName(filePath)
+
+        ' Replace the date portion with a wildcard
+        Dim fileNameWildcard As String = fileName.Replace(Date.Today.ToString("yyyy-MM-dd"), "*")
+
+        Dim files As String() = Directory.GetFiles(directoryPath, fileNameWildcard)
+
+        Return files.Any()
+    End Function
+
+    Private Sub ButtonExcelToKML_Click(sender As Object, e As EventArgs) Handles ButtonExcelToKML.Click
+
+        Dim excelFilePath As String = GetSavedPath(ExcelConfigFileName)
+
+        ' If the saved path exists and is a valid Excel file, use it.
+        If Not String.IsNullOrEmpty(excelFilePath) AndAlso FileExistsWithWildcard(excelFilePath) AndAlso IsExcelFile(excelFilePath) Then
+            ' Use the saved path
+        Else
+            MessageBox.Show("It appears the path to the Excel file is not valid. Please select the Excel file in the Mongoose Folder.")
+            ' Prompt the user to select an Excel file.
+            Dim openFileDialog As New OpenFileDialog()
+            openFileDialog.Filter = "Excel Files|*.xls;*.xlsx;*.xlsm"
+
+            If openFileDialog.ShowDialog() = DialogResult.OK Then
+                excelFilePath = openFileDialog.FileName
+                SavePath(excelFilePath, ExcelConfigFileName)
+            Else
+                ' If no file is selected, exit the method.
+                Return
+            End If
+        End If
+
+        ' Declare these after we're sure we have a valid excelFilePath
+        Dim kmlDirectoryPath As String = Path.GetDirectoryName(excelFilePath)
 
         ' Get the backup directory path for Personnel and EquipmentKML.kml
         Dim backupDirectoryPath As String = Path.Combine(kmlDirectoryPath, "_backups", "_Personnel_and_EquipmentKML")
 
         Using package As New ExcelPackage(New FileInfo(excelFilePath))
-            Dim personnelWorksheet = package.Workbook.Worksheets("Personnel")
-            Dim assetsWorksheet = package.Workbook.Worksheets("Pangea_Assets_Raw")
-            ''/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-            ''/////////////////////////////////////////////////////////////////////////////////////////////////// USE CODE BELOW IF YOU WANT TO USE THE OPEN FILE DIALOG BOX TO SELECT THE EXCEL FILE<<<<<<<<<<
-
-            'Dim openFileDialog As New OpenFileDialog()
-            ''openFileDialog.Filter = "Excel Files|*.xls;*.xlsx;*.xlsm"
-
-            ''If openFileDialog.ShowDialog() = DialogResult.OK Then
-            ''Dim excelFilePath As String = openFileDialog.FileName
-            ''Dim kmlDirectoryPath As String = Path.GetDirectoryName(excelFilePath)
-
-            ' Get the backup directory path for Personnel and EquipmentKML.kml
-            ''Dim backupDirectoryPath As String = Path.Combine(kmlDirectoryPath, "_backups", "_Personnel_and_EquipmentKML")
-
-            ''Using package As New ExcelPackage(New FileInfo(excelFilePath))
-            '' Dim personnelWorksheet = package.Workbook.Worksheets("Personnel")
-            '' Dim assetsWorksheet = package.Workbook.Worksheets("Pangea_Assets_Raw")
-            ''/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-            ''/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                Dim personnelWorksheet = package.Workbook.Worksheets("Personnel")
+                Dim assetsWorksheet = package.Workbook.Worksheets("Pangea_Assets_Raw")
 
 
             Dim settings As New XmlWriterSettings()
-            settings.Indent = True
+                settings.Indent = True
 
-            'This code Is creating a KML file from two Excel worksheets. It Is using an XmlWriter to create the KML file and writing the start document and start element. It then
-            'creates a folder for Personnel, Past City, Current City, and Future City. It then loops through the personnelWorksheet to create pushpins for each employee in the past,
-            'current, and future cities. It then creates a folder for Assets and creates subfolders for Equipment, Instruments, Safety Equipment, IT Device, and Vehicle. It then loops
-            'through the assetsWorksheet to create pushpins for each asset and finds the matching personnel for the coordinates. Finally, it writes the end element and end document.
             Using kmlMemoryStream As New MemoryStream()
-                Using writer As XmlWriter = XmlWriter.Create(kmlMemoryStream, settings)
-                    writer.WriteStartDocument()
-                    writer.WriteStartElement("kml", "http://www.opengis.net/kml/2.2")
-                    writer.WriteStartElement("Document")
+                    Using writer As XmlWriter = XmlWriter.Create(kmlMemoryStream, settings)
+                        writer.WriteStartDocument()
+                        writer.WriteStartElement("kml", "http://www.opengis.net/kml/2.2")
+                        writer.WriteStartElement("Document")
 
-                    ' Start of Personnel Folder
-                    writer.WriteStartElement("Folder")
-                    writer.WriteElementString("name", "Personnel")
-
-                    ' Past City Folder
-                    writer.WriteStartElement("Folder")
-                    writer.WriteElementString("name", "Past City")
-
-                    Dim i As Integer = 2
-                    While personnelWorksheet.Cells(i, 1).Value IsNot Nothing
-                        Dim employeeName As String = personnelWorksheet.Cells(i, 1).Value.ToString()
-                        Dim cityLatitude As String = If(personnelWorksheet.Cells(i, 11).Value IsNot Nothing, personnelWorksheet.Cells(i, 11).Value.ToString(), "")
-                        Dim cityLongitude As String = If(personnelWorksheet.Cells(i, 12).Value IsNot Nothing, personnelWorksheet.Cells(i, 12).Value.ToString(), "")
-
-                        ' Create Pushpin for Past City
-                        CreatePushpin(writer, employeeName, "", cityLatitude, cityLongitude)
-
-                        i += 1
-                    End While
-                    ' End of Past City Folder
-                    writer.WriteEndElement()
-
-                    ' Current City Folder
-                    writer.WriteStartElement("Folder")
-                    writer.WriteElementString("name", "Current City")
-
-                    i = 2 ' Re-initialize the variable i without re-declaring
-                    While personnelWorksheet.Cells(i, 1).Value IsNot Nothing
-                        Dim employeeName As String = personnelWorksheet.Cells(i, 1).Value.ToString()
-                        Dim cityLatitude As String = If(personnelWorksheet.Cells(i, 13).Value IsNot Nothing, personnelWorksheet.Cells(i, 13).Value.ToString(), "")
-                        Dim cityLongitude As String = If(personnelWorksheet.Cells(i, 14).Value IsNot Nothing, personnelWorksheet.Cells(i, 14).Value.ToString(), "")
-
-                        ' Search for employee name in assetsWorksheet
-                        Dim description As String = ""
-                        Dim j As Integer = 2
-                        While assetsWorksheet.Cells(j, 13).Value IsNot Nothing
-                            Dim assetName As String = assetsWorksheet.Cells(j, 13).Value.ToString()
-                            If assetName = employeeName Then
-                                Dim headerC As String = assetsWorksheet.Cells(1, 3).Value.ToString()
-                                Dim headerF As String = assetsWorksheet.Cells(1, 6).Value.ToString()
-                                Dim valueC As String = assetsWorksheet.Cells(j, 3).Value.ToString()
-                                Dim valueF As String = assetsWorksheet.Cells(j, 6).Value.ToString()
-                                description &= $"{headerC}: {valueC}, {headerF}: {valueF}" & Environment.NewLine
-                            End If
-                            j += 1
-                        End While
-
-                        ' Create Pushpin for Current City
-                        CreatePushpin(writer, employeeName, description, cityLatitude, cityLongitude)
-
-                        i += 1
-                    End While
-
-                    ' End of Current City Folder
-                    writer.WriteEndElement()
-
-                    ' Future City Folder
-                    writer.WriteStartElement("Folder")
-                    writer.WriteElementString("name", "Future City")
-
-                    i = 2 'Get coordinates for Future City
-                    While personnelWorksheet.Cells(i, 1).Value IsNot Nothing
-                        Dim employeeName As String = personnelWorksheet.Cells(i, 1).Value.ToString()
-                        Dim cityLatitude As String = If(personnelWorksheet.Cells(i, 15).Value IsNot Nothing, personnelWorksheet.Cells(i, 15).Value.ToString(), "")
-                        Dim cityLongitude As String = If(personnelWorksheet.Cells(i, 16).Value IsNot Nothing, personnelWorksheet.Cells(i, 16).Value.ToString(), "")
-
-                        ' Create Pushpin for Future City
-                        CreatePushpin(writer, employeeName, "", cityLatitude, cityLongitude)
-
-                        i += 1
-                    End While
-                    ' End of Future City Folder
-                    writer.WriteEndElement()
-
-                    ' End of Personnel Folder
-                    writer.WriteEndElement()
-
-                    ' Start of Assets Folder
-                    writer.WriteStartElement("Folder")
-                    writer.WriteElementString("name", "Assets")
-
-                    ' Subfolders for Assets: Equipment, Instruments, Safety Equipment, IT Device, Vehicle
-                    Dim subFoldersAssets As New List(Of String) From {"Equipment", "Instruments", "Safety Equipment", "IT Device", "Vehicle"}
-
-                    For Each folder In subFoldersAssets
-                        ' Start of Sub Folder
+                        ' Start of Personnel Folder
                         writer.WriteStartElement("Folder")
-                        writer.WriteElementString("name", folder)
+                        writer.WriteElementString("name", "Personnel")
 
-                        Dim k As Integer = 2
-                        While assetsWorksheet.Cells(k, 3).Value IsNot Nothing
-                            Dim folderName As String = assetsWorksheet.Cells(k, 1).Value.ToString()
-                            Dim itemName As String = assetsWorksheet.Cells(k, 3).Value.ToString()
+                        ' Past City Folder
+                        writer.WriteStartElement("Folder")
+                        writer.WriteElementString("name", "Past City")
 
-                            ' Get header titles
-                            Dim header2 As String = assetsWorksheet.Cells(1, 2).Value.ToString()
-                            Dim header5 As String = assetsWorksheet.Cells(1, 5).Value.ToString()
-                            Dim header6 As String = assetsWorksheet.Cells(1, 6).Value.ToString()
-                            Dim header10 As String = assetsWorksheet.Cells(1, 10).Value.ToString()
-                            Dim header13 As String = assetsWorksheet.Cells(1, 13).Value.ToString()
+                        Dim i As Integer = 2
+                        While personnelWorksheet.Cells(i, 1).Value IsNot Nothing
+                            Dim employeeName As String = personnelWorksheet.Cells(i, 1).Value.ToString()
+                            Dim cityLatitude As String = If(personnelWorksheet.Cells(i, 11).Value IsNot Nothing, personnelWorksheet.Cells(i, 11).Value.ToString(), "")
+                            Dim cityLongitude As String = If(personnelWorksheet.Cells(i, 12).Value IsNot Nothing, personnelWorksheet.Cells(i, 12).Value.ToString(), "")
 
-                            ' Get values
-                            Dim value2 As String = assetsWorksheet.Cells(k, 2).Value.ToString()
-                            Dim value5 As String = assetsWorksheet.Cells(k, 5).Value.ToString()
-                            Dim value6 As String = assetsWorksheet.Cells(k, 6).Value.ToString()
-                            Dim value10 As String = assetsWorksheet.Cells(k, 10).Value.ToString()
-                            Dim value13 As String = assetsWorksheet.Cells(k, 13).Value.ToString()
+                            ' Create Pushpin for Past City
+                            CreatePushpin(writer, employeeName, "", cityLatitude, cityLongitude)
 
-                            ' Create description string
-                            Dim description As String = $"{header13}: {value13}{vbCrLf}{header2}: {value2}{vbCrLf}{header5}: {value5}{vbCrLf}{header6}: {value6}{vbCrLf}{header10}: {value10}"
+                            i += 1
+                        End While
+                        ' End of Past City Folder
+                        writer.WriteEndElement()
 
-                            Dim personnelName As String = assetsWorksheet.Cells(k, 13).Value.ToString()
+                        ' Current City Folder
+                        writer.WriteStartElement("Folder")
+                        writer.WriteElementString("name", "Current City")
 
-                            ' Find matching personnel for coordinates
+                        i = 2 ' Re-initialize the variable i without re-declaring
+                        While personnelWorksheet.Cells(i, 1).Value IsNot Nothing
+                            Dim employeeName As String = personnelWorksheet.Cells(i, 1).Value.ToString()
+                            Dim cityLatitude As String = If(personnelWorksheet.Cells(i, 13).Value IsNot Nothing, personnelWorksheet.Cells(i, 13).Value.ToString(), "")
+                            Dim cityLongitude As String = If(personnelWorksheet.Cells(i, 14).Value IsNot Nothing, personnelWorksheet.Cells(i, 14).Value.ToString(), "")
+
+                            ' Search for employee name in assetsWorksheet
+                            Dim description As String = ""
                             Dim j As Integer = 2
-                            Dim latitude As String = ""
-                            Dim longitude As String = ""
-                            While personnelWorksheet.Cells(j, 1).Value IsNot Nothing
-                                If personnelWorksheet.Cells(j, 1).Value.ToString() = personnelName Then
-                                    latitude = personnelWorksheet.Cells(j, 13).Value.ToString()
-                                    longitude = personnelWorksheet.Cells(j, 14).Value.ToString()
-                                    Exit While
+                            While assetsWorksheet.Cells(j, 13).Value IsNot Nothing
+                                Dim assetName As String = assetsWorksheet.Cells(j, 13).Value.ToString()
+                                If assetName = employeeName Then
+                                    Dim headerC As String = assetsWorksheet.Cells(1, 3).Value.ToString()
+                                    Dim headerF As String = assetsWorksheet.Cells(1, 6).Value.ToString()
+                                    Dim valueC As String = assetsWorksheet.Cells(j, 3).Value.ToString()
+                                    Dim valueF As String = assetsWorksheet.Cells(j, 6).Value.ToString()
+                                    description &= $"{headerC}: {valueC}, {headerF}: {valueF}" & Environment.NewLine
                                 End If
                                 j += 1
                             End While
 
-                            ' Create Pushpin only if the folder name matches
-                            If folderName = folder Then
-                                CreatePushpin(writer, itemName, description, latitude, longitude)
-                            End If
+                            ' Create Pushpin for Current City
+                            CreatePushpin(writer, employeeName, description, cityLatitude, cityLongitude)
 
-                            k += 1
+                            i += 1
                         End While
 
-                        ' End of Sub Folder
+                        ' End of Current City Folder
                         writer.WriteEndElement()
-                    Next
 
-                    ' End of Assets Folder
-                    writer.WriteEndElement()
+                        ' Future City Folder
+                        writer.WriteStartElement("Folder")
+                        writer.WriteElementString("name", "Future City")
 
-                    writer.WriteEndElement() ' End Document
-                    writer.WriteEndElement() ' End kml
-                    writer.WriteEndDocument()
-                End Using
+                        i = 2 'Get coordinates for Future City
+                        While personnelWorksheet.Cells(i, 1).Value IsNot Nothing
+                            Dim employeeName As String = personnelWorksheet.Cells(i, 1).Value.ToString()
+                            Dim cityLatitude As String = If(personnelWorksheet.Cells(i, 15).Value IsNot Nothing, personnelWorksheet.Cells(i, 15).Value.ToString(), "")
+                            Dim cityLongitude As String = If(personnelWorksheet.Cells(i, 16).Value IsNot Nothing, personnelWorksheet.Cells(i, 16).Value.ToString(), "")
 
-                Dim currentDate As String = DateTime.Now.ToString("yyyy-MM-dd")
-                Dim newKMLFile As String = currentDate & "_Personnel_and_Equipment.kml"
-                Dim kmlFilePath As String = Path.Combine(kmlDirectoryPath, newKMLFile)
-                ''//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-                ''///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////USE THIS CODE WHEN USING THE FILE DIALOG BOX<<<<<<<<
+                            ' Create Pushpin for Future City
+                            CreatePushpin(writer, employeeName, "", cityLatitude, cityLongitude)
+
+                            i += 1
+                        End While
+                        ' End of Future City Folder
+                        writer.WriteEndElement()
+
+                        ' End of Personnel Folder
+                        writer.WriteEndElement()
+
+                        ' Start of Assets Folder
+                        writer.WriteStartElement("Folder")
+                        writer.WriteElementString("name", "Assets")
+
+                        ' Subfolders for Assets: Equipment, Instruments, Safety Equipment, IT Device, Vehicle
+                        Dim subFoldersAssets As New List(Of String) From {"Equipment", "Instruments", "Safety Equipment", "IT Device", "Vehicle"}
+
+                        For Each folder In subFoldersAssets
+                            ' Start of Sub Folder
+                            writer.WriteStartElement("Folder")
+                            writer.WriteElementString("name", folder)
+
+                            Dim k As Integer = 2
+                            While assetsWorksheet.Cells(k, 3).Value IsNot Nothing
+                                Dim folderName As String = assetsWorksheet.Cells(k, 1).Value.ToString()
+                                Dim itemName As String = assetsWorksheet.Cells(k, 3).Value.ToString()
+
+                                ' Get header titles
+                                Dim header2 As String = assetsWorksheet.Cells(1, 2).Value.ToString()
+                                Dim header5 As String = assetsWorksheet.Cells(1, 5).Value.ToString()
+                                Dim header6 As String = assetsWorksheet.Cells(1, 6).Value.ToString()
+                                Dim header10 As String = assetsWorksheet.Cells(1, 10).Value.ToString()
+                                Dim header13 As String = assetsWorksheet.Cells(1, 13).Value.ToString()
+
+                                ' Get values
+                                Dim value2 As String = assetsWorksheet.Cells(k, 2).Value.ToString()
+                                Dim value5 As String = assetsWorksheet.Cells(k, 5).Value.ToString()
+                                Dim value6 As String = assetsWorksheet.Cells(k, 6).Value.ToString()
+                                Dim value10 As String = assetsWorksheet.Cells(k, 10).Value.ToString()
+                                Dim value13 As String = assetsWorksheet.Cells(k, 13).Value.ToString()
+
+                                ' Create description string
+                                Dim description As String = $"{header13}: {value13}{vbCrLf}{header2}: {value2}{vbCrLf}{header5}: {value5}{vbCrLf}{header6}: {value6}{vbCrLf}{header10}: {value10}"
+
+                                Dim personnelName As String = assetsWorksheet.Cells(k, 13).Value.ToString()
+
+                                ' Find matching personnel for coordinates
+                                Dim j As Integer = 2
+                                Dim latitude As String = ""
+                                Dim longitude As String = ""
+                                While personnelWorksheet.Cells(j, 1).Value IsNot Nothing
+                                    If personnelWorksheet.Cells(j, 1).Value.ToString() = personnelName Then
+                                        latitude = personnelWorksheet.Cells(j, 13).Value.ToString()
+                                        longitude = personnelWorksheet.Cells(j, 14).Value.ToString()
+                                        Exit While
+                                    End If
+                                    j += 1
+                                End While
+
+                                ' Create Pushpin only if the folder name matches
+                                If folderName = folder Then
+                                    CreatePushpin(writer, itemName, description, latitude, longitude)
+                                End If
+
+                                k += 1
+                            End While
+
+                            ' End of Sub Folder
+                            writer.WriteEndElement()
+                        Next
+
+                        ' End of Assets Folder
+                        writer.WriteEndElement()
+
+                        writer.WriteEndElement() ' End Document
+                        writer.WriteEndElement() ' End kml
+                        writer.WriteEndDocument()
+                    End Using
+
+                    Dim currentDate As String = DateTime.Now.ToString("yyyy-MM-dd")
+                    Dim newKMLFile As String = currentDate & "_Personnel_and_Equipment.kml"
+                    Dim kmlFilePath As String = Path.Combine(kmlDirectoryPath, newKMLFile)
+
                 ' Get all files matching the pattern "????-??-??_Personnel_and_Equipment.kml"
-                '' Dim directoryInfo As New DirectoryInfo(kmlDirectoryPath)
-                '' Dim allFiles As FileInfo() = directoryInfo.GetFiles("????-??-??_Personnel_and_Equipment.kml")
-                ''/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-                ''/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////ONLY USE THIS WITHOUT FILE DIALOG BOX<<<<<<<<<
-                directoryInfo = New DirectoryInfo(kmlDirectoryPath)
-                allFiles = directoryInfo.GetFiles("????-??-??_Personnel_and_Equipment.kml")
-                ''////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-                ''////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+                Dim directoryInfo As New DirectoryInfo(kmlDirectoryPath)
+                    Dim allFiles As FileInfo() = directoryInfo.GetFiles("????-??-??_Personnel_and_Equipment.kml")
+
                 If allFiles.Length > 0 Then
-                    ' Ensure backup directory exists
-                    If Not Directory.Exists(backupDirectoryPath) Then
-                        Directory.CreateDirectory(backupDirectoryPath)
+                        ' Ensure backup directory exists
+                        If Not Directory.Exists(backupDirectoryPath) Then
+                            Directory.CreateDirectory(backupDirectoryPath)
+                        End If
+
+                        For Each file As FileInfo In allFiles
+                            Dim originalFileName As String = file.Name
+                            Dim backupFilePath As String = Path.Combine(backupDirectoryPath, originalFileName)
+
+                            ' Check if a file with the same name already exists in the backup directory
+                            Dim counter As Integer = 1
+                            While System.IO.File.Exists(backupFilePath)
+                                Dim fileNameWithoutExtension As String = Path.GetFileNameWithoutExtension(originalFileName)
+                                Dim extension As String = Path.GetExtension(originalFileName)
+                                backupFilePath = Path.Combine(backupDirectoryPath, $"{fileNameWithoutExtension}_{counter}{extension}")
+                                counter += 1
+                            End While
+
+                            ' Move the file to the backup directory
+                            file.MoveTo(backupFilePath)
+                        Next
                     End If
 
-                    For Each file As FileInfo In allFiles
-                        Dim originalFileName As String = file.Name
-                        Dim backupFilePath As String = Path.Combine(backupDirectoryPath, originalFileName)
+                    ' File path for the parent directory
+                    Dim newKMLFilePath As String = Path.Combine(kmlDirectoryPath, newKMLFile)
 
-                        ' Check if a file with the same name already exists in the backup directory
-                        Dim counter As Integer = 1
-                        While System.IO.File.Exists(backupFilePath)
-                            Dim fileNameWithoutExtension As String = Path.GetFileNameWithoutExtension(originalFileName)
-                            Dim extension As String = Path.GetExtension(originalFileName)
-                            backupFilePath = Path.Combine(backupDirectoryPath, $"{fileNameWithoutExtension}_{counter}{extension}")
-                            counter += 1
-                        End While
+                    ' Save the KML data to the new KML file in the parent directory
+                    CreateKMLFile(newKMLFilePath, kmlMemoryStream)
 
-                        ' Move the file to the backup directory
-                        file.MoveTo(backupFilePath)
-                    Next
-                End If
+                    ' File path for the _mongoose subdirectory
+                    Dim mongooseSubdirectoryPath As String = Path.Combine(kmlDirectoryPath, "_mongoose")
+                    Dim mongooseSubdirectoryFilePath As String = Path.Combine(mongooseSubdirectoryPath, newKMLFile)
 
-                ' File path for the parent directory
-                Dim newKMLFilePath As String = Path.Combine(kmlDirectoryPath, newKMLFile)
+                    ' Ensure _mongoose subdirectory exists
+                    If Not Directory.Exists(mongooseSubdirectoryPath) Then
+                        Directory.CreateDirectory(mongooseSubdirectoryPath)
+                    End If
 
-                ' Save the KML data to the new KML file in the parent directory
-                CreateKMLFile(newKMLFilePath, kmlMemoryStream)
+                    ' Save the KML data to the new KML file in the _mongoose subdirectory
+                    CreateKMLFile(mongooseSubdirectoryFilePath, kmlMemoryStream)
 
-                ' File path for the _mongoose subdirectory
-                Dim mongooseSubdirectoryPath As String = Path.Combine(kmlDirectoryPath, "_mongoose")
-                Dim mongooseSubdirectoryFilePath As String = Path.Combine(mongooseSubdirectoryPath, newKMLFile)
-
-                ' Ensure _mongoose subdirectory exists
-                If Not Directory.Exists(mongooseSubdirectoryPath) Then
-                    Directory.CreateDirectory(mongooseSubdirectoryPath)
-                End If
-
-                ' Save the KML data to the new KML file in the _mongoose subdirectory
-                CreateKMLFile(mongooseSubdirectoryFilePath, kmlMemoryStream)
-
+                End Using
             End Using
-        End Using
 
 
-        MessageBox.Show("Mongoose was Successful!")
-        ''End If
+            MessageBox.Show("Mongoose was Successful!")
+
     End Sub
 
-
-    'This code creates an instance of the FolderBrowserDialog, which is a dialog box that allows the user to select a folder. It then shows the FolderBrowserDialog and
-    ' if the user clicks the OK button, it stores the selected folder path in a variable. Finally, it calls the ProcessDirectory() method, passing in the folder path as
-    ' an argument. The ProcessDirectory() method will then recursively search through the folder and its subfolders.
     Private Sub ButtonKMZToKML_Click(sender As Object, e As EventArgs) Handles ButtonKMZToKML.Click
-        ''//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        ''///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////THIS CODE IS FOR THE FILE DIALOG BOX<<<<<<<<<<<<<<<<
+        Dim folderPath As String = GetSavedFolderPath()
 
-        ' Create an instance of the FolderBrowserDialog
-        ''Dim folderBrowserDialog As New FolderBrowserDialog()
+        ' If the saved folder path exists, use it. Otherwise, prompt the user to select a folder.
+        If Not String.IsNullOrEmpty(folderPath) AndAlso Directory.Exists(folderPath) Then
+            ' Use the saved folder path
+        Else
+            MessageBox.Show("It appears the folder path has changed. Please select the Mongoose Folder again.")
+            folderPath = ShowFolderBrowserDialog()
+            If String.IsNullOrEmpty(folderPath) OrElse Not Directory.Exists(folderPath) Then
+                ' If no folder is selected, exit the method.
+                Return
+            End If
+            SaveFolderPath(folderPath)
+        End If
 
-        ' Show the FolderBrowserDialog
-        ''If folderBrowserDialog.ShowDialog() = DialogResult.OK Then
-        ''Dim folderPath As String = folderBrowserDialog.SelectedPath
-        ' Recursively search through the folder and its subfolders
-        ''ProcessDirectory(folderPath)
-        ''End If
+        ' Continue with the logic for processing the directory
+        ProcessDirectory(folderPath)
 
-        ''//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        ''///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////USE THIS CODE TO AUTOMATICALLY USE THE MONGOOSE DIRECTORY<<<<<<<<<<<<<<<<
-        Dim userProfilePath As String = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
-        Dim selectedFolderPath As String = Path.Combine(userProfilePath, "Acuren Inspection, Inc", "523 CP - General", "Management", "Project Management", "Mongoose")
-
-        ' Proceed with processing the directory
-        ProcessDirectory(selectedFolderPath)
-        '////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        MessageBox.Show("Mongoose Successfully converted KMZ's to KML's!")
     End Sub
-
-
-    'This code is part of a subroutine that is triggered when a button is clicked. It begins by opening a folder browser dialog and allowing the user to select a folder
-    '. If the user does not select a folder, a message box is displayed. The code then gets the current date in the format yyyy-mm-dd and creates a new KML file with that
-    ' date as the name. It then generates a KML file with a subfolder hierarchy in the selected folder and displays a message box to indicate that the file was successfully
-    ' created. If an error occurs, a message box is displayed with the error message.
 
     Private Sub ButtonCombineKML_Click(sender As Object, e As EventArgs) Handles ButtonCombineKML.Click
+        Dim folderPath As String = GetSavedFolderPath()
 
-        ''////////////////////////////////////////////////////////////////////////////////THIS CODE WILL REPLACE THE OPEN FILE DIALOG BOX WITH A CODE THAT WILL AUTOMATICALLY USE THE MONGOOSE DIRECTORY<<<<<<
-        ' Get the user's directory path
-        Dim userProfilePath As String = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
+        ' If the saved folder path exists, use it. Otherwise, prompt the user to select a folder.
+        If Not String.IsNullOrEmpty(folderPath) AndAlso Directory.Exists(folderPath) Then
+            ' Use the saved folder path
+        Else
+            MessageBox.Show("It appears the folder path has changed. Please select the Mongoose Folder again.")
+            folderPath = ShowFolderBrowserDialog()
+            If String.IsNullOrEmpty(folderPath) OrElse Not Directory.Exists(folderPath) Then
+                ' If no folder is selected, exit the method.
+                Return
+            End If
+            SaveFolderPath(folderPath)
+        End If
 
-        ' Add additional directory structure
-        Dim selectedFolderPath As String = Path.Combine(userProfilePath, "Acuren Inspection, Inc", "523 CP - General", "Management", "Project Management", "Mongoose")
-        ''///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-        ''///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////USE THIS CODE BELOW IF YOU WANT TO USE THE OPEN FILE DIALOG BOX<<<<<<<<<<<
-        ''Dim selectedFolderPath As String = ShowFolderBrowserDialog()
-
-        ''If String.IsNullOrWhiteSpace(selectedFolderPath) Then
-        ''MessageBox.Show("No folder selected.")
-        ''Return
-        ''End If
-        ''////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+        ' Continue with the logic for processing the directory
+        ' ...
         Dim currentDate As String = DateTime.Now.ToString("yyyy-MM-dd")
         Dim newKMLFile As String = currentDate & " Mongoose.kml"
-        Dim kmlFilePath As String = Path.Combine(selectedFolderPath, newKMLFile)
+        Dim kmlFilePath As String = Path.Combine(folderPath, newKMLFile)
 
         ' Get the DirectoryInfo for the selected folder
-        Dim directoryInfo As New DirectoryInfo(selectedFolderPath)
+        Dim directoryInfo As New DirectoryInfo(folderPath)
 
         ' Get all files matching the pattern "????-??-?? Mongoose.kml"
         Dim allFiles As FileInfo() = directoryInfo.GetFiles("????-??-?? Mongoose.kml")
 
         If allFiles.Length > 0 Then
             ' The _backups/_MongooseKML subdirectory path
-            Dim backupDirectoryPath As String = Path.Combine(selectedFolderPath, "_backups", "_MongooseKML")
+            Dim backupDirectoryPath As String = Path.Combine(folderPath, "_backups", "_MongooseKML")
 
             For Each file As FileInfo In allFiles
                 ' Get the original file name
@@ -387,7 +434,7 @@ Public Class Form1
         End If
 
         Try
-            GenerateSubfolderHierarchyKML(selectedFolderPath, kmlFilePath)
+            GenerateSubfolderHierarchyKML(folderPath, kmlFilePath)
             MessageBox.Show("Mongoose successfully created a combined KML file!")
         Catch ex As Exception
             MessageBox.Show("An error occurred: " + ex.Message)
@@ -653,14 +700,5 @@ Public Class Form1
             Directory.Delete(tempFolderPath, True)
         End If
     End Sub
-
-    Private Function ShowFolderBrowserDialog() As String 'Function used in ButtonCombineKML_Click
-        Using folderBrowserDialog As New FolderBrowserDialog()
-            If folderBrowserDialog.ShowDialog() = DialogResult.OK Then
-                Return folderBrowserDialog.SelectedPath
-            End If
-        End Using
-        Return Nothing
-    End Function
 
 End Class
